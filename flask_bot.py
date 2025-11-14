@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import asyncio
 import logging
+import threading
 from datetime import date
 from utils import (
     conectar_google_sheets,
@@ -132,8 +133,21 @@ application.add_handler(
     CommandHandler(
        "last", print_last_transactions, filters=authorized_only))
 
-asyncio.get_event_loop().run_until_complete(application.initialize())
-asyncio.get_event_loop().run_until_complete(application.start())
+# asyncio.get_event_loop().run_until_complete(application.initialize())
+# asyncio.get_event_loop().run_until_complete(application.start())
+bot_loop = asyncio.new_event_loop()
+
+
+def _run_loop():
+    asyncio.set_event_loop(bot_loop)
+    bot_loop.run_forever()
+
+
+threading.Thread(target=_run_loop, daemon=True).start()
+
+# Inicializa o application dentro do loop do bot (thread-safe)
+asyncio.run_coroutine_threadsafe(application.initialize(), bot_loop).result()
+asyncio.run_coroutine_threadsafe(application.start(), bot_loop).result()
 
 
 @app.route("/")
@@ -147,7 +161,9 @@ def webhook():
     try:
         json_data = request.get_json(force=True)
         update = Update.de_json(json_data, application.bot)
-        asyncio.run(application.process_update(update))  # Executa a corrotina
+        # asyncio.run(application.process_update(update))
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update), bot_loop)
         return "ok"
     except Exception as e:
         logger.error(f"Erro no webhook: {e}")
