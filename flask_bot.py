@@ -1,3 +1,4 @@
+from flask import Flask, request
 from dotenv import load_dotenv
 import os
 import logging
@@ -19,6 +20,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
+application = Flask(__name__)
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -117,26 +120,25 @@ async def print_last_transactions(
         )
     await update.message.reply_text(mensagem)
 
-
-def main():
-    if not TELEGRAM_TOKEN:
-        raise RuntimeError("Defina as variáveis de ambiente TELEGRAM_TOKEN.")
-
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(
+app.add_handler(
         CommandHandler("start", start, filters=authorized_only))
-    app.add_handler(
+app.add_handler(
         CommandHandler("help", help_command, filters=authorized_only))
-    app.add_handler(
+app.add_handler(
         CommandHandler("save", save_command, filters=authorized_only))
-    app.add_handler(
+app.add_handler(
         CommandHandler(
             "last", print_last_transactions, filters=authorized_only))
 
-    logger.info("Bot iniciado.")
-    app.run_polling()
+
+# ---- Webhook ----
+@application.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    app.update_queue.put(update)
+    return "ok"
 
 
 if __name__ == "__main__":
-    main()
+    PORT = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=PORT)
