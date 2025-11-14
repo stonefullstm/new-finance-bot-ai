@@ -20,8 +20,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-application = Flask(__name__)
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+app = Flask(__name__)
+application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -120,22 +120,22 @@ async def print_last_transactions(
         )
     await update.message.reply_text(mensagem)
 
-app.add_handler(
+application.add_handler(
         CommandHandler("start", start, filters=authorized_only))
-app.add_handler(
+application.add_handler(
         CommandHandler("help", help_command, filters=authorized_only))
-app.add_handler(
+application.add_handler(
         CommandHandler("save", save_command, filters=authorized_only))
-app.add_handler(
+application.add_handler(
         CommandHandler(
             "last", print_last_transactions, filters=authorized_only))
 
 
 # ---- Webhook ----
-@application.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    app.update_queue.put(update)
+    application.update_queue.put(update)
     return "ok"
 
 
