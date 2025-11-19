@@ -13,15 +13,16 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     filters)
-import openai
+from openai import OpenAI
 
-load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-openai.api_key = OPENAI_API_KEY
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+load_dotenv()
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,6 @@ def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
     """
     # normaliza colunas
     df = df.copy()
-    # lower_cols = {c: c.strip() for c in df.columns}
     # garantir colunas mínimas
     required = ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']
     # tentar mapear colunas sem acento
@@ -236,19 +236,60 @@ async def diagnostic_command(
         logger.exception("Erro no resumo financeiro")
         await update.message.reply_text(f"Erro ao processar os dados: {e}")
         return
-    mensagem = (
-        f"Resumo Financeiro:\n"
-        f"Receitas: {resumo['receitas']}\n"
-        f"Despesas: {resumo['despesas']}\n"
-        f"Saldo: {resumo['saldo']}\n"
-        f"Taxa de Poupança: {resumo['taxa_poupanca_pct']}%\n"
-        f"Dívidas: {resumo['dividas']}\n"
-        f"Período: {resumo['periodo_inicio']} a {resumo['periodo_fim']}\n"
-        f"Despesas por Categoria:\n"
-    )
-    for categoria, valor in resumo['despesas_por_categoria'].items():
-        mensagem += f" - {categoria}: {valor}\n"
-    await update.message.reply_text(mensagem)
+    # mensagem = (
+    #     f"Resumo Financeiro:\n"
+    #     f"Receitas: {resumo['receitas']}\n"
+    #     f"Despesas: {resumo['despesas']}\n"
+    #     f"Saldo: {resumo['saldo']}\n"
+    #     f"Taxa de Poupança: {resumo['taxa_poupanca_pct']}%\n"
+    #     f"Dívidas: {resumo['dividas']}\n"
+    #     f"Período: {resumo['periodo_inicio']} a {resumo['periodo_fim']}\n"
+    #     f"Despesas por Categoria:\n"
+    # )
+    # for categoria, valor in resumo['despesas_por_categoria'].items():
+    #     mensagem += f" - {categoria}: {valor}\n"
+    # await update.message.reply_text(mensagem)
+    prompt = montar_prompt_para_openai(resumo)
+    # chamada básica para OpenAI (Chat Completions)
+    try:
+        # Ajuste de acordo com a SDK usada; aqui usamos a
+        # API REST via client.chat.completions
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system",
+                 "content":
+                     """Você é um assistente especialista
+                     em finanças pessoais."""},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+            temperature=0.3)
+        texto_relatorio = response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.exception(f"Erro chamando OpenAI {e}")
+        await update.message.reply_text(
+            f"Erro ao gerar o relatório via OpenAI {e}")
+        texto_relatorio = (
+            "Relatório automático (fallback):\n\n"
+            f"Receitas: R$ {resumo['receitas']}\n"
+            f"Despesas: R$ {resumo['despesas']}\n"
+            f"Saldo: R$ {resumo['saldo']}\n"
+            f"Taxa poupança: {resumo['taxa_poupanca_pct']}%\n"
+        )
+
+    # enviar resultados
+    # primeiro um resumo curto
+    resumo_msg = (
+        f"✅ Diagnóstico pronto!\n\n"
+        f"Receitas: R$ {resumo['receitas']:.2f}\n"
+        f"Despesas: R$ {resumo['despesas']:.2f}\n"
+        f"Saldo: R$ {resumo['saldo']:.2f}\n"
+        f"Taxa de poupança: {resumo['taxa_poupanca_pct']:.2f}%\n\n"
+        "Relatório completo em anexo (PDF) e abaixo em texto."
+        )
+    await update.message.reply_text(resumo_msg)
+    await update.message.reply_text(texto_relatorio)
 
 
 def main():
