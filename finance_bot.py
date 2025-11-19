@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import logging
+import pandas as pd
 from datetime import date
 from utils import (
     conectar_google_sheets,
@@ -12,12 +13,15 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     filters)
-
+import openai
 
 load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+openai.api_key = OPENAI_API_KEY
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +35,72 @@ class AuthorizedOnly(filters.BaseFilter):
 
 
 authorized_only = AuthorizedOnly()
+
+
+def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
+    """
+    Espera colunas: ['Data','Descrição','Categoria','Tipo','Valor', ...]
+    Tipo é 'Receita' ou 'Despesa' (case-insensitive)
+    """
+    # normaliza colunas
+    df = df.copy()
+    # lower_cols = {c: c.strip() for c in df.columns}
+    # garantir colunas mínimas
+    required = ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']
+    # tentar mapear colunas sem acento
+    # assume usuário usou cabeçalhos corretos
+    for col in required:
+        if col not in df.columns:
+            raise ValueError(
+                f"A coluna obrigatória '{col}' não foi encontrada na planilha."
+                )
+
+    # converter tipos
+    df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0.0)
+    df['Tipo'] = df['Tipo'].astype(str).str.strip().str.capitalize()
+    # garantir datas
+    try:
+        df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
+    except Exception:
+        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+
+    # calcular métricas básicas
+    receitas = df.loc[df['Tipo'] == 'Receita', 'Valor'].sum()
+    despesas = df.loc[df['Tipo'] == 'Despesa', 'Valor'].sum()
+    saldo = receitas - despesas
+    taxa_poupanca_pct = (saldo / receitas * 100) if receitas != 0 else 0.0
+
+    # distribuição por categoria (somente despesas)
+    despesas_por_cat = (
+        df.loc[df['Tipo'] == 'Despesa']
+        .groupby('Categoria')['Valor']
+        .sum()
+        .sort_values(ascending=False)
+        .to_dict()
+    )
+
+    # dívida detectada: categoria chamada 'Dívidas' ou 'Dividas'
+    dividas = 0.0
+    for key in ['Dívidas', 'Dividas', 'Divida', 'Dívida']:
+        if key in df['Categoria'].unique():
+            dividas += df.loc[
+                (df['Categoria'] == key) & (df['Tipo'] == 'Despesa'), 'Valor'
+                ].sum()
+
+    resumo = {
+        "receitas": round(float(receitas), 2),
+        "despesas": round(float(despesas), 2),
+        "saldo": round(float(saldo), 2),
+        "taxa_poupanca_pct": round(float(taxa_poupanca_pct), 2),
+        "despesas_por_categoria":
+            {str(k): float(v) for k, v in despesas_por_cat.items()},
+        "dividas": round(float(dividas), 2),
+        "periodo_inicio": str(df['Data'].min()) if
+            not df['Data'].isnull().all() else None,
+        "periodo_fim": str(df['Data'].max()) if
+            not df['Data'].isnull().all() else None,
+    }
+    return resumo
 
 
 # Handlers
@@ -52,6 +122,7 @@ async def help_command(
         "   Tipo deve ser 'Despesa' ou 'Receita'\n"
         "   Exemplo: /save 50,00/Alimentação/Despesa/Jantar com amigos\n"
         "/last - Mostrar as últimas 5 transações\n"
+        "/diagnostic - Analisar a planilha e fornecer insights\n"
     )
     await update.message.reply_text(help_text)
 
@@ -124,6 +195,34 @@ async def print_last_transactions(
     await update.message.reply_text(mensagem)
 
 
+async def diagnostic_command(
+        update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    cliente = conectar_google_sheets()
+    planilha = cliente.open("Minhas Finanças Pessoais")
+    sheet = planilha.worksheet("Transações")
+    registros = sheet.get_all_records()
+    df = pd.DataFrame(registros)
+    try:
+        resumo = gerar_resumo_financeiro(df)
+    except Exception as e:
+        logger.exception("Erro no resumo financeiro")
+        await update.message.reply_text(f"Erro ao processar os dados: {e}")
+        return
+    mensagem = (
+        f"Resumo Financeiro:\n"
+        f"Receitas: {resumo['receitas']}\n"
+        f"Despesas: {resumo['despesas']}\n"
+        f"Saldo: {resumo['saldo']}\n"
+        f"Taxa de Poupança: {resumo['taxa_poupanca_pct']}%\n"
+        f"Dívidas: {resumo['dividas']}\n"
+        f"Período: {resumo['periodo_inicio']} a {resumo['periodo_fim']}\n"
+        f"Despesas por Categoria:\n"
+    )
+    for categoria, valor in resumo['despesas_por_categoria'].items():
+        mensagem += f" - {categoria}: {valor}\n"
+    await update.message.reply_text(mensagem)
+
+
 def main():
     if not TELEGRAM_TOKEN:
         raise RuntimeError("Defina as variáveis de ambiente TELEGRAM_TOKEN.")
@@ -139,6 +238,9 @@ def main():
     app.add_handler(
         CommandHandler(
             "last", print_last_transactions, filters=authorized_only))
+    app.add_handler(
+        CommandHandler(
+            "diagnostic", diagnostic_command, filters=authorized_only))
 
     logger.info("Bot iniciado.")
     app.run_polling()
