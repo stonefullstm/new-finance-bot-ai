@@ -103,6 +103,34 @@ def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
     return resumo
 
 
+def montar_prompt_para_openai(resumo: dict) -> str:
+    # Template em PT-BR para o modelo receber e gerar diagnóstico
+    prompt = f"""
+    Você é um especialista em finanças pessoais. Analise o resumo financeiro
+    abaixo e gere um relatório de diagnóstico completo, claro e motivador.
+    Divida o relatório em: Visão geral, Principais pontos de atenção,
+    Oportunidades de economia, Plano de ação (3 a 5 passos) e Recomendação
+    de produtos/contas para reserva de emergência.
+    Seja prático e dê números concretos (valores em reais e percentuais).
+
+    Resumo financeiro (auto-gerado):
+    - Período: {resumo.get('periodo_inicio')} até {resumo.get('periodo_fim')}
+    - Receitas totais: R$ {resumo.get('receitas'):.2f}
+    - Despesas totais: R$ {resumo.get('despesas'):.2f}
+    - Saldo: R$ {resumo.get('saldo'):.2f}
+    - Taxa de poupança (% sobre a receita):
+        {resumo.get('taxa_poupanca_pct'):.2f}%
+    - Dívidas identificadas (valor): R$ {resumo.get('dividas'):.2f}
+    - Distribuição das maiores categorias de despesa:
+        {resumo.get('despesas_por_categoria')}
+
+    Dê recomendações específicas com valores (ex.: "reduza X na categoria Y,
+    isso economiza R$ Z por mês") e proponha metas (ex.: reserva de emergência
+    equivalente a N meses de despesas).
+    """
+    return prompt
+
+
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
