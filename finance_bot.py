@@ -43,12 +43,11 @@ def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
     Espera colunas: ['Data','Descrição','Categoria','Tipo','Valor', ...]
     Tipo é 'Receita' ou 'Despesa' (case-insensitive)
     """
-    # normaliza colunas
     df = df.copy()
     # garantir colunas mínimas
     required = ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']
     # tentar mapear colunas sem acento
-    # assume usuário usou cabeçalhos corretos
+    # assume que o usuário usou cabeçalhos corretos
     for col in required:
         if col not in df.columns:
             raise ValueError(
@@ -257,7 +256,7 @@ async def diagnostic_command(
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system",
+                {"role": "developer",
                  "content":
                      """Você é um assistente especialista
                      em finanças pessoais."""},
