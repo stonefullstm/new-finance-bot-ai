@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import json
 import os
 import logging
 import pandas as pd
@@ -12,6 +13,7 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
     filters)
 from openai import OpenAI
 
@@ -291,6 +293,105 @@ async def diagnostic_command(
     await update.message.reply_text(texto_relatorio)
 
 
+async def interpretar(update, context):
+    mensagem = update.message.text
+
+    # Chama IA para extrair informação
+    try:
+        resposta = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Você é um sistema de categorização de
+                        transações financeiras. Responda APENAS em formato
+                        JSON válido, sem explicações adicionais."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Extraia da frase abaixo:
+                        - valor (float, usar . como separador decimal)
+                        - tipo: "Receita" ou "Despesa"
+                        - categoria (uma palavra)
+                        - data (YYYY-MM-DD; se não informado,
+                            usar {date.today().isoformat()})
+
+                    Frase: "{mensagem}"
+
+                    Retorne APENAS JSON, exemplo:
+                        {{"valor": 58.0, "tipo": "Despesa",
+                            "categoria": "Alimentacao",
+                            "data": "2025-11-28"}}"""
+                }
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+        texto = resposta.choices[0].message.content.strip()
+    except Exception as e:
+        logger.exception("Erro chamando OpenAI")
+        await update.message.reply_text(f"Erro na API de IA: {e}")
+        return
+
+    # Extrair JSON do texto
+    try:
+        start = texto.find("{")
+        end = texto.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise ValueError("Nenhum JSON encontrado na resposta")
+
+        json_text = texto[start:end]
+        dados = json.loads(json_text)
+
+        valor = float(dados["valor"])
+        tipo = dados["tipo"].capitalize()
+        categoria = dados["categoria"].capitalize()
+        data_str = dados.get("data", date.today().isoformat()).strip()
+
+        # Validar e normalizar data
+        try:
+            data_obj = pd.to_datetime(
+                    data_str, format="%Y-%m-%d", errors='coerce')
+            if pd.isna(data_obj):
+                data = date.today().isoformat()
+            else:
+                data = data_obj.strftime("%Y-%m-%d")
+        except Exception as e:
+            logger.exception("Erro ao parsear data: %s", e)
+            data = date.today().isoformat()
+
+    except Exception as e:
+        logger.exception("Erro ao parsear resposta da IA")
+        await update.message.reply_text(
+            f"Não consegui interpretar. Erro: {e}\nResposta: {texto[:500]}"
+        )
+        return
+
+    try:
+        cliente = conectar_google_sheets()
+        planilha = cliente.open("Minhas Finanças Pessoais")
+        sheet = planilha.worksheet("Transações")
+        sheet.append_row(
+            [
+                data,
+                "",
+                categoria,
+                valor,
+                tipo,
+            ]
+        )
+        await update.message.reply_text(
+            f"📌 Registrado!\n\n"
+            f"Tipo: {tipo}\n"
+            f"Categoria: {categoria}\n"
+            f"Valor: R$ {valor:,.2f}\n"
+            f"Data: {data}"
+        )
+    except Exception as e:
+        logger.exception("Erro ao salvar na planilha")
+        await update.message.reply_text(f"Erro ao salvar na planilha: {e}")
+
+
 def main():
     if not TELEGRAM_TOKEN:
         raise RuntimeError("Defina as variáveis de ambiente TELEGRAM_TOKEN.")
@@ -309,7 +410,8 @@ def main():
     app.add_handler(
         CommandHandler(
             "diagnostic", diagnostic_command, filters=authorized_only))
-
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, interpretar))
     logger.info("Bot iniciado.")
     app.run_polling()
 
