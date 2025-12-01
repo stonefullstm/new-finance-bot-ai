@@ -40,6 +40,21 @@ class AuthorizedOnly(filters.BaseFilter):
 authorized_only = AuthorizedOnly()
 
 
+def abrir_planilha():
+    """
+    Abre a planilha de finanças pessoais no Google Sheets.
+    Retorna o objeto da planilha.
+    """
+    cliente = conectar_google_sheets()
+    try:
+        planilha = cliente.open("Minhas Finanças Pessoais")
+        sheet = planilha.worksheet("Transações")
+        return sheet
+    except Exception as e:
+        logger.exception(f"Erro ao abrir a planilha: {e}")
+        raise RuntimeError("Não foi possível abrir a planilha de finanças.")
+
+
 def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
     """
     Espera colunas: ['Data','Descrição','Categoria','Tipo','Valor', ...]
