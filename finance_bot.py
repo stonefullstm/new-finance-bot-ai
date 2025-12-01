@@ -322,15 +322,15 @@ async def interpretar(update, context):
                         - valor (float, usar . como separador decimal)
                         - tipo: "Receita" ou "Despesa"
                         - categoria (uma palavra)
-                        - data (YYYY-MM-DD; se não informado,
-                            usar {date.today().isoformat()})
+                        - data (DD/MM/YYYY; se não informado,
+                            usar {date.today().strftime("%d/%m/%Y")})
 
                     Frase: "{mensagem}"
 
                     Retorne APENAS JSON, exemplo:
-                        {{"valor": 58.0, "tipo": "Despesa",
+                        {{"valor": 58,.0, "tipo": "Despesa",
                             "categoria": "Alimentacao",
-                            "data": "2025-11-28"}}"""
+                            "data": "28/11/2025"}}"""
                 }
             ],
             max_tokens=200,
@@ -360,14 +360,14 @@ async def interpretar(update, context):
         # Validar e normalizar data
         try:
             data_obj = pd.to_datetime(
-                    data_str, format="%Y-%m-%d", errors='coerce')
+                    data_str, format="%d/%m/%Y", errors='coerce')
             if pd.isna(data_obj):
-                data = date.today().isoformat()
+                data = date.today().strftime("%d/%m/%Y")
             else:
-                data = data_obj.strftime("%Y-%m-%d")
+                data = data_obj.strftime("%d/%m/%Y")
         except Exception as e:
             logger.exception("Erro ao parsear data: %s", e)
-            data = date.today().isoformat()
+            data = date.today().strftime("%d/%m/%Y")
 
     except Exception as e:
         logger.exception("Erro ao parsear resposta da IA")
