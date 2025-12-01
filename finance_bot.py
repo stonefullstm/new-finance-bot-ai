@@ -200,9 +200,7 @@ async def save_command(
             "O valor deve ser um número. Por favor, tente novamente."
         )
         return
-    cliente = conectar_google_sheets()
-    planilha = cliente.open("Minhas Finanças Pessoais")
-    sheet = planilha.worksheet("Transações")
+    sheet = abrir_planilha()
     # Adiciona uma nova linha na planilha com os dados fornecidos
     sheet.append_row(
         [
@@ -224,9 +222,7 @@ async def save_command(
 
 async def print_last_transactions(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cliente = conectar_google_sheets()
-    planilha = cliente.open("Minhas Finanças Pessoais")
-    sheet = planilha.worksheet("Transações")
+    sheet = abrir_planilha()
     registros = sheet.get_all_records()
     ultimos = registros[-5:]  # Últimas 5 transações
     mensagem = "Últimas 5 transações:\n"
@@ -241,9 +237,7 @@ async def print_last_transactions(
 
 async def diagnostic_command(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cliente = conectar_google_sheets()
-    planilha = cliente.open("Minhas Finanças Pessoais")
-    sheet = planilha.worksheet("Transações")
+    sheet = abrir_planilha()
     registros = sheet.get_all_records()
     df = pd.DataFrame(registros)
     try:
@@ -383,9 +377,8 @@ async def interpretar(update, context):
         return
 
     try:
-        cliente = conectar_google_sheets()
-        planilha = cliente.open("Minhas Finanças Pessoais")
-        sheet = planilha.worksheet("Transações")
+        sheet = abrir_planilha()
+        # Adiciona uma nova linha na planilha com os dados extraídos
         sheet.append_row(
             [
                 data,
