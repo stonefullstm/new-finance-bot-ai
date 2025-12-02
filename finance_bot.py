@@ -1,3 +1,4 @@
+import ast
 from dotenv import load_dotenv
 import json
 import os
@@ -7,7 +8,8 @@ from datetime import date
 from utils import (
     conectar_google_sheets,
     normalizar_string,
-    validar_chat_id)
+    # validar_chat_id
+    )
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,27 +19,37 @@ from telegram.ext import (
     filters)
 from openai import OpenAI
 
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-load_dotenv()
-
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+load_dotenv()
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+CHAT_ID_LIST = ast.literal_eval(os.getenv("CHAT_ID_LIST", "[]"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # Filtro customizado para validação de chat_id
-class AuthorizedOnly(filters.BaseFilter):
-    async def filter(self, update: Update) -> bool:
-        return validar_chat_id(update.message.chat.id)
+class AuthorizedOnlyFilter(filters.BaseFilter):
+    def filter(
+            self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        if not update.message:
+            return False
+        chat_id = update.effective_chat.chat.id
+        authorized = chat_id in CHAT_ID_LIST
+        if not authorized:
+            logger.warning(f"Acesso negado para chat_id: {chat_id}")
+        else:
+            logger.info(f"Acesso autorizado para chat_id: {chat_id}")
+        return authorized
 
 
-authorized_only = AuthorizedOnly()
+# Instanciar uma única vez
+authorized_only = AuthorizedOnlyFilter()
 
 
 def abrir_planilha():
@@ -267,7 +279,7 @@ async def diagnostic_command(
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "developer",
+                {"role": "system",
                  "content":
                      """Você é um assistente especialista
                      em finanças pessoais."""},
@@ -407,7 +419,7 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(
-        CommandHandler("start", start, filters=authorized_only))
+        CommandHandler("start", start, authorized_only))
     app.add_handler(
         CommandHandler("help", help_command, filters=authorized_only))
     app.add_handler(
@@ -419,7 +431,8 @@ def main():
         CommandHandler(
             "diagnostic", diagnostic_command, filters=authorized_only))
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, interpretar))
+        MessageHandler(
+            authorized_only & filters.TEXT & ~filters.COMMAND, interpretar))
     logger.info("Bot iniciado.")
     app.run_polling()
 
