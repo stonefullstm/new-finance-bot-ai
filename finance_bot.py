@@ -34,12 +34,13 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # Filtro customizado para validação de chat_id
-class AuthorizedOnlyFilter(filters.BaseFilter):
+class AuthorizedOnlyFilter(filters.MessageFilter):
     def filter(
-            self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-        if not update.message:
+            self, update: Update) -> bool:
+        if not update or not update.from_user:
             return False
-        chat_id = update.effective_chat.chat.id
+        chat_id = update.from_user.id
+        logger.info(f"Verificando chat_id: {chat_id}")
         authorized = chat_id in CHAT_ID_LIST
         if not authorized:
             logger.warning(f"Acesso negado para chat_id: {chat_id}")
@@ -419,7 +420,8 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(
-        CommandHandler("start", start, authorized_only))
+        CommandHandler(
+            "start", start, filters=authorized_only))
     app.add_handler(
         CommandHandler("help", help_command, filters=authorized_only))
     app.add_handler(
