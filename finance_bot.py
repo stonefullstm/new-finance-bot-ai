@@ -40,13 +40,7 @@ class AuthorizedOnlyFilter(filters.MessageFilter):
         if not update or not update.from_user:
             return False
         chat_id = update.from_user.id
-        logger.info(f"Verificando chat_id: {chat_id}")
-        authorized = chat_id in CHAT_ID_LIST
-        if not authorized:
-            logger.warning(f"Acesso negado para chat_id: {chat_id}")
-        else:
-            logger.info(f"Acesso autorizado para chat_id: {chat_id}")
-        return authorized
+        return chat_id in CHAT_ID_LIST
 
 
 # Instanciar uma única vez
@@ -198,7 +192,7 @@ async def save_command(
     # Obtém os dados fornecidos pelo usuário e separa-os
     dados = context.args[0].split("/")
     # Verifica se há pelo menos 3 partes (valor, categoria, tipo)
-    if len(dados) <= 3:
+    if len(dados) < 3:
         await update.message.reply_text(
             ("Formato inválido. Use: valor/categoria/tipo/descrição"
              )
@@ -237,8 +231,20 @@ async def print_last_transactions(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sheet = abrir_planilha()
     registros = sheet.get_all_records()
-    ultimos = registros[-5:]  # Últimas 5 transações
-    mensagem = "Últimas 5 transações:\n"
+    if not context.args:
+        num_transacoes = 5
+    else:
+        try:
+            num_transacoes = int(context.args[0])
+        except ValueError:
+            num_transacoes = 5
+    if len(registros) == 0:
+        await update.message.reply_text("Nenhuma transação registrada.")
+        return
+    elif num_transacoes > len(registros):
+        num_transacoes = len(registros)
+    ultimos = registros[-num_transacoes:]  # Últimas transações
+    mensagem = f"Últimas {num_transacoes} transações:\n"
     for registro in ultimos:
         mensagem += (
             f"{registro['Data']}: {registro['Tipo']} de "
