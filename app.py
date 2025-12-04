@@ -469,7 +469,7 @@ def webhook():
         return "ok"
     except Exception as e:
         logger.error(f"Erro no webhook: {e}")
-        return "erro", 500
+        return "Erro no webhook", 500
 
 
 if __name__ == "__main__":
