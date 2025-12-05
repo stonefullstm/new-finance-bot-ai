@@ -177,10 +177,14 @@ async def help_command(
         "/start - Iniciar o bot\n"
         "/help - Mostrar esta mensagem de ajuda\n"
         "/save - Salvar um lançamento na planilha\n"
-        "   /save valor/categoria/tipo/descrição (descrição é opcional)\n"
+        "   /save [valor/categoria/tipo/descrição] (descrição é opcional)\n"
         "   Tipo deve ser 'Despesa' ou 'Receita'\n"
         "   Exemplo: /save 50,00/Alimentação/Despesa/Jantar com amigos\n"
-        "/last - Mostrar as últimas 5 transações\n"
+        "/last - Mostrar as últimas transações\n"
+        "   /last [número] (padrão 5)\n"
+        "/diagnostic - Gerar diagnóstico financeiro via IA\n"
+        "Mensagens de texto livres também são aceitas para registro de "
+        "transações, ex.: 'Gastei 30 reais em transporte hoje'."
     )
     await update.message.reply_text(help_text)
 
