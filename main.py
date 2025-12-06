@@ -1,7 +1,5 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-# import asyncio
-# import threading
 import ast
 from dotenv import load_dotenv
 import json
@@ -9,10 +7,10 @@ import os
 import logging
 import pandas as pd
 from datetime import date
+from gspread.utils import ValueRenderOption
 from utils import (
     conectar_google_sheets,
     normalizar_string,
-    # validar_chat_id
     )
 from telegram import Update
 from telegram.ext import (
@@ -102,7 +100,6 @@ def gerar_resumo_financeiro(df: pd.DataFrame) -> dict:
             raise ValueError(
                 f"A coluna obrigatória '{col}' não foi encontrada na planilha."
                 )
-
     # converter tipos
     df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0.0)
     df['Tipo'] = df['Tipo'].astype(str).str.strip().str.capitalize()
@@ -199,6 +196,7 @@ async def help_command(
         "   Exemplo: /save 50,00/Alimentação/Despesa/Jantar com amigos\n"
         "/last - Mostrar as últimas transações\n"
         "   /last [número] (padrão 5)\n"
+        "/summary - Mostrar resumo financeiro atual\n"
         "/diagnostic - Gerar diagnóstico financeiro via IA\n"
         "Mensagens de texto livres também são aceitas para registro de "
         "transações, ex.: 'Gastei 30 reais em transporte hoje'."
@@ -250,10 +248,39 @@ async def save_command(
     )
 
 
+async def print_summary(
+        update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    sheet = abrir_planilha()
+    registros = sheet.get_all_records(
+      value_render_option=ValueRenderOption.unformatted)
+    df = pd.DataFrame(registros)
+    try:
+        resumo = gerar_resumo_financeiro(df)
+    except Exception as e:
+        logger.exception("Erro no resumo financeiro")
+        await update.message.reply_text(f"Erro ao processar os dados: {e}")
+        return
+    mensagem = (
+        f"Resumo Financeiro:\n"
+        f"Receitas: R$ {resumo['receitas']}\n"
+        f"Despesas: R$ {resumo['despesas']}\n"
+        f"Saldo: R$ {resumo['saldo']}\n"
+        f"Taxa de Poupança: {resumo['taxa_poupanca_pct']}%\n"
+        f"Dívidas: R$ {resumo['dividas']}\n"
+        f"Período: {resumo['periodo_inicio']} a {resumo['periodo_fim']}\n"
+        f"Despesas por Categoria:\n"
+    )
+    for categoria, valor in resumo['despesas_por_categoria'].items():
+        mensagem += f" - {categoria}: R$ {valor}\n"
+    await update.message.reply_text(mensagem)
+
+
 async def print_last_transactions(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sheet = abrir_planilha()
-    registros = sheet.get_all_records()
+    registros = sheet.get_all_records(
+      value_render_option=ValueRenderOption.unformatted
+    )
     if not context.args:
         num_transacoes = 5
     else:
@@ -280,7 +307,9 @@ async def print_last_transactions(
 async def diagnostic_command(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sheet = abrir_planilha()
-    registros = sheet.get_all_records()
+    registros = sheet.get_all_records(
+      value_render_option=ValueRenderOption.unformatted
+    )
     df = pd.DataFrame(registros)
     try:
         resumo = gerar_resumo_financeiro(df)
@@ -288,19 +317,6 @@ async def diagnostic_command(
         logger.exception("Erro no resumo financeiro")
         await update.message.reply_text(f"Erro ao processar os dados: {e}")
         return
-    # mensagem = (
-    #     f"Resumo Financeiro:\n"
-    #     f"Receitas: {resumo['receitas']}\n"
-    #     f"Despesas: {resumo['despesas']}\n"
-    #     f"Saldo: {resumo['saldo']}\n"
-    #     f"Taxa de Poupança: {resumo['taxa_poupanca_pct']}%\n"
-    #     f"Dívidas: {resumo['dividas']}\n"
-    #     f"Período: {resumo['periodo_inicio']} a {resumo['periodo_fim']}\n"
-    #     f"Despesas por Categoria:\n"
-    # )
-    # for categoria, valor in resumo['despesas_por_categoria'].items():
-    #     mensagem += f" - {categoria}: {valor}\n"
-    # await update.message.reply_text(mensagem)
     prompt = montar_prompt_para_openai(resumo)
     # chamada básica para OpenAI (Chat Completions)
     try:
@@ -452,23 +468,14 @@ application.add_handler(
     CommandHandler(
        "last", print_last_transactions, filters=authorized_only))
 application.add_handler(
+    CommandHandler(
+        "diagnostic", diagnostic_command, filters=authorized_only))
+application.add_handler(
+    CommandHandler(
+        "summary", print_summary, filters=authorized_only))
+application.add_handler(
     MessageHandler(
         authorized_only & filters.TEXT & ~filters.COMMAND, interpretar))
-
-
-# bot_loop = asyncio.new_event_loop()
-
-
-# def _run_loop():
-#     asyncio.set_event_loop(bot_loop)
-#     bot_loop.run_forever()
-
-
-# threading.Thread(target=_run_loop, daemon=True).start()
-
-# # Inicializa o application dentro do loop do bot (thread-safe)
-# asyncio.run_coroutine_threadsafe(application.initialize(), bot_loop).result()
-# asyncio.run_coroutine_threadsafe(application.start(), bot_loop).result()
 
 
 @app.get("/")
@@ -480,11 +487,7 @@ def hello_world():
 @app.post("/webhook")
 async def webhook(json_data: dict = None):
     try:
-        # json_data = await Request.json(self=Request)
         update = Update.de_json(json_data, application.bot)
-        # asyncio.run(application.process_update(update))
-        # asyncio.run_coroutine_threadsafe(
-        #     application.process_update(update), bot_loop)
         await application.process_update(update)
         return {"mensagem": "Ok"}
     except Exception as e:
