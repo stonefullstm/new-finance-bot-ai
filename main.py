@@ -281,6 +281,11 @@ async def print_last_transactions(
     registros = sheet.get_all_records(
       value_render_option=ValueRenderOption.unformatted
     )
+    registros_com_indice = [
+          {**dicionario, 'id': indice + 1}
+          for indice, dicionario in enumerate(registros)
+        ]
+
     if not context.args:
         num_transacoes = 5
     else:
@@ -293,10 +298,11 @@ async def print_last_transactions(
         return
     elif num_transacoes > len(registros):
         num_transacoes = len(registros)
-    ultimos = registros[-num_transacoes:]  # Últimas transações
+    ultimos = registros_com_indice[-num_transacoes:]  # Últimas transações
     mensagem = f"Últimas {num_transacoes} transações:\n"
     for registro in ultimos:
         mensagem += (
+            f"{registro['id']}. "
             f"{registro['Data']}: {registro['Tipo']} de "
             f"{registro['Valor']} em {registro['Categoria']} - "
             f"{registro['Descrição']}\n"
