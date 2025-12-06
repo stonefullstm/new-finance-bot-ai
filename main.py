@@ -196,6 +196,8 @@ async def help_command(
         "   Exemplo: /save 50,00/Alimentação/Despesa/Jantar com amigos\n"
         "/last - Mostrar as últimas transações\n"
         "   /last [número] (padrão 5)\n"
+        "/delete - Deletar uma transação pelo ID\n"
+        "   /delete [ID da transação]\n"
         "/summary - Mostrar resumo financeiro atual\n"
         "/diagnostic - Gerar diagnóstico financeiro via IA\n"
         "Mensagens de texto livres também são aceitas para registro de "
@@ -248,6 +250,34 @@ async def save_command(
     )
 
 
+async def delete_command(
+        update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text(
+            "Por favor, forneça o ID da transação a ser deletada."
+        )
+        return
+    try:
+        row_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text(
+            "O ID da transação deve ser um número inteiro."
+        )
+        return
+
+    sheet = abrir_planilha()
+    try:
+        sheet.delete_rows(row_id)
+        await update.message.reply_text(
+            f"Transação com ID {row_id} deletada com sucesso."
+        )
+    except Exception as e:
+        logger.exception("Erro ao deletar transação")
+        await update.message.reply_text(
+            f"Erro ao deletar a transação: {e}"
+        )
+
+
 async def print_summary(
         update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sheet = abrir_planilha()
@@ -282,7 +312,8 @@ async def print_last_transactions(
       value_render_option=ValueRenderOption.unformatted
     )
     registros_com_indice = [
-          {**dicionario, 'id': indice + 1}
+          # Adiciona índice baseado na posição na lista + 2 (cabeçalho)
+          {**dicionario, 'id': indice + 2}
           for indice, dicionario in enumerate(registros)
         ]
 
@@ -470,6 +501,8 @@ application.add_handler(
     CommandHandler("help", help_command, filters=authorized_only))
 application.add_handler(
     CommandHandler("save", save_command, filters=authorized_only))
+application.add_handler(
+    CommandHandler("delete", delete_command, filters=authorized_only))
 application.add_handler(
     CommandHandler(
        "last", print_last_transactions, filters=authorized_only))
