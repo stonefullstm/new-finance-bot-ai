@@ -1,6 +1,7 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-import asyncio
-import threading
+# import asyncio
+# import threading
 import ast
 from dotenv import load_dotenv
 import json
@@ -29,9 +30,25 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-app = FastAPI()
-application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+application = (
+      ApplicationBuilder()
+      .updater(None)
+      .token(TELEGRAM_TOKEN)
+      .build()
+    )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await application.bot.setWebhook(WEBHOOK_URL)
+    async with application:
+        await application.start()
+        yield
+        await application.stop()
+
+app = FastAPI(lifespan=lifespan)
 
 
 CHAT_ID_LIST = ast.literal_eval(os.getenv("CHAT_ID_LIST", "[]"))
@@ -439,19 +456,19 @@ application.add_handler(
         authorized_only & filters.TEXT & ~filters.COMMAND, interpretar))
 
 
-bot_loop = asyncio.new_event_loop()
+# bot_loop = asyncio.new_event_loop()
 
 
-def _run_loop():
-    asyncio.set_event_loop(bot_loop)
-    bot_loop.run_forever()
+# def _run_loop():
+#     asyncio.set_event_loop(bot_loop)
+#     bot_loop.run_forever()
 
 
-threading.Thread(target=_run_loop, daemon=True).start()
+# threading.Thread(target=_run_loop, daemon=True).start()
 
-# Inicializa o application dentro do loop do bot (thread-safe)
-asyncio.run_coroutine_threadsafe(application.initialize(), bot_loop).result()
-asyncio.run_coroutine_threadsafe(application.start(), bot_loop).result()
+# # Inicializa o application dentro do loop do bot (thread-safe)
+# asyncio.run_coroutine_threadsafe(application.initialize(), bot_loop).result()
+# asyncio.run_coroutine_threadsafe(application.start(), bot_loop).result()
 
 
 @app.get("/")
@@ -466,8 +483,9 @@ async def webhook(json_data: dict = None):
         # json_data = await Request.json(self=Request)
         update = Update.de_json(json_data, application.bot)
         # asyncio.run(application.process_update(update))
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update), bot_loop)
+        # asyncio.run_coroutine_threadsafe(
+        #     application.process_update(update), bot_loop)
+        await application.process_update(update)
         return {"mensagem": "Ok"}
     except Exception as e:
         logger.error(f"Erro no webhook: {e}")
