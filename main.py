@@ -1,4 +1,4 @@
-from flask import Flask, Request
+from fastapi import FastAPI
 import asyncio
 import threading
 import ast
@@ -30,7 +30,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-app = Flask(__name__)
+app = FastAPI()
 application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 
@@ -454,26 +454,21 @@ asyncio.run_coroutine_threadsafe(application.initialize(), bot_loop).result()
 asyncio.run_coroutine_threadsafe(application.start(), bot_loop).result()
 
 
-@app.route("/")
+@app.get("/")
 def hello_world():
-    return "<p>Bot rodando</p>"
+    return {"mensagem": "Bot rodando"}
 
 
 # ---- Webhook ----
-@app.route("/webhook", methods=["POST"])
-def webhook(request=Request):
+@app.post("/webhook")
+async def webhook(json_data: dict = None):
     try:
-        json_data = request.get_json(force=True)
+        # json_data = await Request.json(self=Request)
         update = Update.de_json(json_data, application.bot)
         # asyncio.run(application.process_update(update))
         asyncio.run_coroutine_threadsafe(
             application.process_update(update), bot_loop)
-        return "Ok"
+        return {"mensagem": "Ok"}
     except Exception as e:
         logger.error(f"Erro no webhook: {e}")
-        return "Erro no webhook", 500
-
-
-if __name__ == "__main__":
-    PORT = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=PORT)
+        return {"mensagem": "Erro no webhook"}, 500
