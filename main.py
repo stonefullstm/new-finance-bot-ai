@@ -8,6 +8,7 @@ import logging
 import pandas as pd
 from datetime import date
 from gspread.utils import ValueRenderOption
+from secure_eval import avaliar_expressao_segura
 from utils import (
     conectar_google_sheets,
     normalizar_string,
@@ -194,6 +195,9 @@ async def help_command(
         "   /save [valor/categoria/tipo/descrição] (descrição é opcional)\n"
         "   Tipo deve ser 'Despesa' ou 'Receita'\n"
         "   Exemplo: /save 50,00/Alimentação/Despesa/Jantar com amigos\n"
+        "/calc - Calcular uma expressão matemática\n"
+        "   /calc [expressão]\n"
+        "   Exemplo: /calc (3 + 5) * 2\n"
         "/last - Mostrar as últimas transações\n"
         "   /last [número] (padrão 5)\n"
         "/delete - Deletar uma transação pelo ID\n"
@@ -248,6 +252,26 @@ async def save_command(
         no dia {date.today().strftime('%d/%m/%Y')}.
         """
     )
+
+
+async def calc_command(
+        update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text(
+            "Por favor, forneça uma expressão matemática para calcular."
+        )
+        return
+    expressao = " ".join(context.args)
+    try:
+        resultado = avaliar_expressao_segura(expressao)
+        await update.message.reply_text(
+            f"O resultado de '{expressao}' é: {resultado}"
+        )
+    except Exception as e:
+        logger.exception("Erro ao avaliar expressão")
+        await update.message.reply_text(
+            f"Erro ao avaliar a expressão: {e}"
+        )
 
 
 async def delete_command(
@@ -503,6 +527,8 @@ application.add_handler(
     CommandHandler("save", save_command, filters=authorized_only))
 application.add_handler(
     CommandHandler("delete", delete_command, filters=authorized_only))
+application.add_handler(
+    CommandHandler("calc", calc_command, filters=authorized_only))
 application.add_handler(
     CommandHandler(
        "last", print_last_transactions, filters=authorized_only))

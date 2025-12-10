@@ -161,3 +161,4 @@ cython_debug/
 #.idea/
 # Ramdom files :D
 bot_financeiro.py
+conversation.py
