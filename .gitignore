@@ -162,3 +162,4 @@ cython_debug/
 # Ramdom files :D
 bot_financeiro.py
 conversation.py
+multiusuario.py

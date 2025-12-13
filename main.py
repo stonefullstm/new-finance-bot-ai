@@ -261,11 +261,11 @@ async def calc_command(
             "Por favor, forneça uma expressão matemática para calcular."
         )
         return
-    expressao = " ".join(context.args)
+    expressao = " ".join(context.args).replace(",", ".")
     try:
         resultado = avaliar_expressao_segura(expressao)
         await update.message.reply_text(
-            f"O resultado de '{expressao}' é: {resultado}"
+            f"O resultado de '{expressao}' é: {resultado:.2f}"
         )
     except Exception as e:
         logger.exception("Erro ao avaliar expressão")
