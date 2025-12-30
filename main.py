@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import date
 from gspread.utils import ValueRenderOption
 from secure_eval import avaliar_expressao_segura
+from database.supabase_client import supabase
 from utils import (
     conectar_google_sheets,
     normalizar_string,
@@ -177,10 +178,34 @@ def montar_prompt_para_openai(resumo: dict) -> str:
     return prompt
 
 
+async def get_or_create_user(telegram_user):
+    response = (
+        supabase.table("user_sheets")
+        .select("*")
+        .eq("telegram_id", telegram_user.id)
+        .execute()
+    )
+
+    if not response.data:
+        # Criar usuário BÁSICO
+        supabase.table("user_sheets").insert(
+            {
+                "telegram_id": telegram_user.id,
+                "created_at": date.today().isoformat(),
+                "sheet_url": "https://docs.google.com/spreadsheets/d/EXAMPLE",
+            }
+        ).execute()
+
+    return response.data[0] if response.data else None
+
+
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+    await get_or_create_user(update.effective_user)
+
     await update.message.reply_text(
-        ("Seja bemvindo ao Finance Bot! "
+        (f"Seja bemvindo ao Finance Bot! {update.effective_user.id}\n"
          "Use /help para ver os comandos disponíveis.")
     )
 
