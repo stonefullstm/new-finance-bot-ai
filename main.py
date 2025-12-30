@@ -188,10 +188,11 @@ async def get_or_create_user(telegram_user):
 
     if not response.data:
         # Criar usuário BÁSICO
-        supabase.table("user_sheets").insert(
+        response = supabase.table("user_sheets").insert(
             {
                 "telegram_id": telegram_user.id,
                 "created_at": date.today().isoformat(),
+                "username": telegram_user.username,
                 "sheet_url": "https://docs.google.com/spreadsheets/d/EXAMPLE",
             }
         ).execute()
@@ -202,10 +203,10 @@ async def get_or_create_user(telegram_user):
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
-    await get_or_create_user(update.effective_user)
+    user = await get_or_create_user(update.effective_user)
 
     await update.message.reply_text(
-        (f"Seja bemvindo ao Finance Bot! {update.effective_user.id}\n"
+        (f"Seja bemvindo ao Finance Bot! {user['username']}\n"
          "Use /help para ver os comandos disponíveis.")
     )
 
