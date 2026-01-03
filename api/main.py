@@ -337,7 +337,9 @@ async def print_summary(
         df = pd.DataFrame(registros)
     else:
         mes = int(context.args[0])
-        ano = int(context.args[1]) if len(context.args) > 1 else date.today().year
+        ano = (int(context.args[1])
+               if len(context.args) > 1
+               else date.today().year)
         df = pd.DataFrame(registros)
         df = df[(df['Data'].dt.month == mes) &
                 (df['Data'].dt.year == ano)]
