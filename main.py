@@ -335,9 +335,12 @@ async def print_summary(
       value_render_option=ValueRenderOption.unformatted)
     mes = ""
     ano = ""
-    if not context.args:
-        df = pd.DataFrame(registros)
-    else:
+    df = pd.DataFrame(registros)
+    try:
+        df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
+    except Exception:
+        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+    if context.args:
         mes = int(context.args[0])
         ano = (int(context.args[1])
                if len(context.args) > 1
