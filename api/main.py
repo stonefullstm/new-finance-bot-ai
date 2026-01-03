@@ -333,7 +333,14 @@ async def print_summary(
     sheet = abrir_planilha()
     registros = sheet.get_all_records(
       value_render_option=ValueRenderOption.unformatted)
-    df = pd.DataFrame(registros)
+    if not context.args:
+        df = pd.DataFrame(registros)
+    else:
+        mes = int(context.args[0])
+        ano = int(context.args[1]) if len(context.args) > 1 else date.today().year
+        df = pd.DataFrame(registros)
+        df = df[(df['Data'].dt.month == mes) &
+                (df['Data'].dt.year == ano)]
     try:
         resumo = gerar_resumo_financeiro(df)
     except Exception as e:
@@ -341,7 +348,7 @@ async def print_summary(
         await update.message.reply_text(f"Erro ao processar os dados: {e}")
         return
     mensagem = (
-        f"Resumo Financeiro:\n"
+        f"Resumo Financeiro: {mes}/{ano}\n"
         f"Receitas: R$ {resumo['receitas']}\n"
         f"Despesas: R$ {resumo['despesas']}\n"
         f"Saldo: R$ {resumo['saldo']}\n"
