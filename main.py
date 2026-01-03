@@ -333,6 +333,8 @@ async def print_summary(
     sheet = abrir_planilha()
     registros = sheet.get_all_records(
       value_render_option=ValueRenderOption.unformatted)
+    mes = ""
+    ano = ""
     if not context.args:
         df = pd.DataFrame(registros)
     else:
